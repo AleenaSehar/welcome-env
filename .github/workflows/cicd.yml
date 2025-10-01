@@ -19,7 +19,6 @@ jobs:
         uses: actions/setup-node@v3
         with:
           node-version: '18'
-          cache: 'npm'
       
       - name: Install dependencies
         run: npm install
@@ -28,7 +27,7 @@ jobs:
         run: npm test --if-present
       
       - name: Build verification
-        run: echo "✅ Build successful"
+        run: echo "Build successful"
 
   deploy-dev:
     name: Deploy to Dev Environment
@@ -42,6 +41,10 @@ jobs:
       
       - name: Deploy to Dev EC2
         uses: appleboy/ssh-action@v1.0.0
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_USER: ${{ secrets.EC2_USER }}
+          EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
@@ -58,7 +61,6 @@ jobs:
             pm2 delete env-welcome-dev || true
             ENV=dev PORT=3000 pm2 start app.js --name env-welcome-dev
             pm2 save
-            echo "✅ Dev deployment complete"
 
   deploy-prod:
     name: Deploy to Production Environment
@@ -67,7 +69,6 @@ jobs:
     if: (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master') && github.event_name == 'push'
     environment:
       name: production
-      url: http://${{ secrets.EC2_HOST }}:3001
     
     steps:
       - name: Checkout code
@@ -75,6 +76,10 @@ jobs:
       
       - name: Deploy to Prod EC2
         uses: appleboy/ssh-action@v1.0.0
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_USER: ${{ secrets.EC2_USER }}
+          EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
@@ -91,4 +96,3 @@ jobs:
             pm2 delete env-welcome-prod || true
             ENV=prod PORT=3001 pm2 start app.js --name env-welcome-prod
             pm2 save
-            echo "✅ Production deployment complete"
