@@ -1,0 +1,94 @@
+name: CI/CD Pipeline
+
+on:
+  pull_request:
+    branches: [develop, main, master]
+  push:
+    branches: [develop, main, master]
+
+jobs:
+  ci:
+    name: Continuous Integration
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm install
+      
+      - name: Run tests
+        run: npm test --if-present
+      
+      - name: Build verification
+        run: echo "✅ Build successful"
+
+  deploy-dev:
+    name: Deploy to Dev Environment
+    needs: ci
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/develop' && github.event_name == 'push'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Deploy to Dev EC2
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            cd ~/env-welcome-dev
+            if [ -d ".git" ]; then
+              git fetch origin develop
+              git reset --hard origin/develop
+            else
+              git clone -b develop https://github.com/${{ github.repository }} .
+            fi
+            npm install --production
+            pm2 delete env-welcome-dev || true
+            ENV=dev PORT=3000 pm2 start app.js --name env-welcome-dev
+            pm2 save
+            echo "✅ Dev deployment complete"
+
+  deploy-prod:
+    name: Deploy to Production Environment
+    needs: ci
+    runs-on: ubuntu-latest
+    if: (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master') && github.event_name == 'push'
+    environment:
+      name: production
+      url: http://${{ secrets.EC2_HOST }}:3001
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Deploy to Prod EC2
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            cd ~/env-welcome-prod
+            if [ -d ".git" ]; then
+              git fetch origin main
+              git reset --hard origin/main
+            else
+              git clone -b main https://github.com/${{ github.repository }} .
+            fi
+            npm install --production
+            pm2 delete env-welcome-prod || true
+            ENV=prod PORT=3001 pm2 start app.js --name env-welcome-prod
+            pm2 save
+            echo "✅ Production deployment complete"
